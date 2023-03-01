@@ -1,0 +1,36 @@
+// SIlang Version 0.1 — sample source file
+// This program exercises every feature the v0.1 lexer must handle.
+
+// ── Basic output ──────────────────────────────────────────────────────────────
+out("Hello, World!")
+
+// ── Variable declarations ─────────────────────────────────────────────────────
+var x = 5
+var y = 10
+out(x + y)
+
+/* Floating-point and boolean values */
+var price  = 19.99
+var active = true
+var done   = false
+
+// ── Arithmetic with precedence ────────────────────────────────────────────────
+var result = (5 + 3) * 10
+out(result)
+
+var complex = 2 * 3 + 4 / 2 - 1
+out(complex)
+
+// ── String concatenation ──────────────────────────────────────────────────────
+var name = "Aung"
+out("Hello " + name)
+out("Price: " + price)
+out("Active: " + active)
+
+// ── Escape sequences inside strings ──────────────────────────────────────────
+var msg = "Line one\nLine two\tTabbed"
+out(msg)
+
+// ── Unary negation ────────────────────────────────────────────────────────────
+var neg = -42
+out(neg)
