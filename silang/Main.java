@@ -2,6 +2,8 @@ package silang;
 
 import silang.ast.AstPrinter;
 import silang.ast.Stmt;
+import silang.interpreter.Interpreter;
+import silang.interpreter.RuntimeError;
 import silang.parser.Parser;
 
 import java.io.IOException;
@@ -14,24 +16,26 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * CLI entry point for the SIlang compiler front-end (Version 0.1).
+ * CLI entry point for the SIlang compiler / interpreter (Version 0.1).
  *
- * <p>Runs the full pipeline: Lexer → Parser → AST, then prints the
- * AST to stdout in S-expression format.
+ * <p>Runs the full pipeline:
+ * <pre>
+ *   source  →  Lexer  →  Parser  →  Interpreter
+ * </pre>
  *
  * <h2>Usage</h2>
  * <pre>
- *   java silang.Main &lt;file.si&gt;               — parse a file, print AST
- *   java silang.Main --expr "&lt;source&gt;"        — parse inline source
- *   java silang.Main --stdin                  — parse from stdin
- *   java silang.Main --tokens &lt;file.si&gt;       — lex only, print tokens
- *   java silang.Main --tokens --expr "..."    — lex inline, print tokens
+ *   java silang.Main &lt;file.si&gt;               — run a SIlang program
+ *   java silang.Main --expr "&lt;source&gt;"        — run inline source
+ *   java silang.Main --stdin                  — run source from stdin
+ *   java silang.Main --ast &lt;file.si&gt;          — print AST, do not run
+ *   java silang.Main --tokens &lt;file.si&gt;       — print tokens, do not run
  * </pre>
  *
  * <h2>Exit codes</h2>
  * <ul>
  *   <li>{@code 0} — success</li>
- *   <li>{@code 1} — lexer or parse error(s)</li>
+ *   <li>{@code 1} — lexer, parse, or runtime error</li>
  *   <li>{@code 2} — file not found or I/O error</li>
  *   <li>{@code 3} — bad command-line arguments</li>
  * </ul>
@@ -50,20 +54,23 @@ public final class Main {
     // ------------------------------------------------------------------ //
 
     public static void main(String[] args) {
-        if (args.length == 0) {
-            printUsage();
-            System.exit(EXIT_BAD_ARGS);
-        }
+        if (args.length == 0) { printUsage(); System.exit(EXIT_BAD_ARGS); }
 
-        // Detect --tokens flag
         List<String> argList = Arrays.asList(args);
+
+        // Mode flags (mutually exclusive; last one wins if multiple given)
         boolean tokensOnly = argList.contains("--tokens");
-        if (tokensOnly) {
-            argList = argList.stream().filter(a -> !a.equals("--tokens")).toList();
-            args = argList.toArray(new String[0]);
-        }
+        boolean astOnly    = argList.contains("--ast");
+
+        // Strip flag tokens so remaining args are purely positional
+        argList = argList.stream()
+            .filter(a -> !a.equals("--tokens") && !a.equals("--ast"))
+            .toList();
+        args = argList.toArray(new String[0]);
 
         if (args.length == 0) { printUsage(); System.exit(EXIT_BAD_ARGS); }
+
+        Mode mode = tokensOnly ? Mode.TOKENS : astOnly ? Mode.AST : Mode.RUN;
 
         switch (args[0]) {
             case "--expr" -> {
@@ -71,28 +78,34 @@ public final class Main {
                     System.err.println("error: --expr requires a source string");
                     System.exit(EXIT_BAD_ARGS);
                 }
-                String source = String.join(" ", List.of(args).subList(1, args.length));
-                runSource(source, "<inline>", tokensOnly);
+                String src = String.join(" ", List.of(args).subList(1, args.length));
+                runSource(src, "<inline>", mode);
             }
             case "--stdin" -> {
                 try {
-                    String source = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
-                    runSource(source, "<stdin>", tokensOnly);
+                    String src = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
+                    runSource(src, "<stdin>", mode);
                 } catch (IOException e) {
-                    System.err.println("error: failed to read stdin: " + e.getMessage());
+                    System.err.println("error: cannot read stdin: " + e.getMessage());
                     System.exit(EXIT_IO_ERROR);
                 }
             }
             case "--help", "-h" -> printUsage();
-            default             -> runFile(args[0], tokensOnly);
+            default             -> runFile(args[0], mode);
         }
     }
+
+    // ------------------------------------------------------------------ //
+    //  Execution modes                                                   //
+    // ------------------------------------------------------------------ //
+
+    private enum Mode { RUN, AST, TOKENS }
 
     // ------------------------------------------------------------------ //
     //  File runner                                                       //
     // ------------------------------------------------------------------ //
 
-    private static void runFile(String filePath, boolean tokensOnly) {
+    private static void runFile(String filePath, Mode mode) {
         Path path = Paths.get(filePath);
         String source;
         try {
@@ -106,7 +119,7 @@ public final class Main {
             System.exit(EXIT_IO_ERROR);
             return;
         }
-        runSource(source, path.getFileName().toString(), tokensOnly);
+        runSource(source, path.getFileName().toString(), mode);
     }
 
     // ------------------------------------------------------------------ //
@@ -114,9 +127,14 @@ public final class Main {
     // ------------------------------------------------------------------ //
 
     /**
-     * Runs the full Lexer → Parser → AST pipeline on the given source text.
+     * Runs the full source → tokens → AST → execution pipeline.
+     *
+     * @param source   SIlang source code
+     * @param fileName display name used in error messages
+     * @param mode     what phase to stop at and what to print
      */
-    private static void runSource(String source, String fileName, boolean tokensOnly) {
+    private static void runSource(String source, String fileName, Mode mode) {
+        List<String> sourceLines = List.of(source.split("\n", -1));
 
         // ── Phase 1: Lexing ──────────────────────────────────────────────
         Lexer lexer = new Lexer(source, fileName);
@@ -131,7 +149,7 @@ public final class Main {
             return;
         }
 
-        if (tokensOnly) {
+        if (mode == Mode.TOKENS) {
             printTokens(tokens);
             System.exit(EXIT_OK);
             return;
@@ -143,7 +161,6 @@ public final class Main {
         try {
             statements = parser.parse();
         } catch (Parser.ParseErrorCollection errors) {
-            List<String> sourceLines = List.of(source.split("\n", -1));
             errors.printAll(sourceLines);
             System.err.printf("%d parse error(s) in '%s'%n",
                 errors.getErrors().size(), fileName);
@@ -151,35 +168,35 @@ public final class Main {
             return;
         }
 
-        // ── Phase 3: AST output ──────────────────────────────────────────
-        printAst(statements, fileName);
+        if (mode == Mode.AST) {
+            printAst(statements, fileName);
+            System.exit(EXIT_OK);
+            return;
+        }
+
+        // ── Phase 3: Interpretation ──────────────────────────────────────
+        Interpreter interpreter = new Interpreter(fileName, sourceLines);
+        try {
+            interpreter.interpret(statements);
+        } catch (RuntimeError error) {
+            System.err.println(interpreter.formatError(error));
+            System.exit(EXIT_ERROR);
+            return;
+        }
+
         System.exit(EXIT_OK);
     }
 
     // ------------------------------------------------------------------ //
-    //  Output: AST                                                       //
+    //  Output: AST (--ast flag)                                         //
     // ------------------------------------------------------------------ //
 
-    /**
-     * Prints the parsed AST as S-expressions, one statement per line.
-     *
-     * <pre>
-     * ============================================================
-     *   SIlang AST — hello.si  (2 statement(s))
-     * ============================================================
-     *   (var x (+ 5 3))
-     *   (call out x)
-     * ============================================================
-     * </pre>
-     */
     private static void printAst(List<Stmt> statements, String fileName) {
         AstPrinter printer = new AstPrinter();
-
         System.out.println("=".repeat(60));
         System.out.printf("  SIlang AST — %s  (%d statement(s))%n",
             fileName, statements.size());
         System.out.println("=".repeat(60));
-
         if (statements.isEmpty()) {
             System.out.println("  (empty program)");
         } else {
@@ -187,19 +204,17 @@ public final class Main {
                 System.out.println("  " + printer.print(stmt));
             }
         }
-
         System.out.println("=".repeat(60));
     }
 
     // ------------------------------------------------------------------ //
-    //  Output: tokens (debug mode via --tokens flag)                    //
+    //  Output: tokens (--tokens flag)                                   //
     // ------------------------------------------------------------------ //
 
     private static void printTokens(List<Token> tokens) {
         System.out.println("=".repeat(60));
         System.out.printf("  SIlang Tokens — %d token(s)%n", tokens.size());
         System.out.println("=".repeat(60));
-
         int prevLine = -1;
         for (Token token : tokens) {
             if (prevLine != -1 && token.line != prevLine && token.type != TokenType.EOF) {
@@ -209,7 +224,6 @@ public final class Main {
             System.out.printf("  %-16s %-22s  [%d:%d]%n",
                 token.type, formatLexeme(token), token.line, token.column);
         }
-
         System.out.println("=".repeat(60));
     }
 
@@ -225,24 +239,26 @@ public final class Main {
 
     private static void printUsage() {
         System.out.println("""
-            SIlang Compiler Front-End — Version 0.1
+            SIlang Interpreter — Version 0.1
 
             Usage:
-              java silang.Main <file.si>              Parse file, print AST
-              java silang.Main --expr "<source>"      Parse inline source
-              java silang.Main --stdin                Parse from stdin
-              java silang.Main --tokens <file.si>     Lex only, print tokens
-              java silang.Main --tokens --expr "..."  Lex inline, print tokens
-              java silang.Main --help                 Show this help
+              java silang.Main <file.si>              Run a SIlang program
+              java silang.Main --expr "<source>"      Run inline source
+              java silang.Main --stdin                Run source from stdin
+              java silang.Main --ast <file.si>        Print AST, do not run
+              java silang.Main --tokens <file.si>     Print tokens, do not run
 
             Examples:
               java silang.Main hello.si
               java silang.Main --expr "var x = 5 + 3"
+              java silang.Main --expr "out(\\"Hello, World!\\")"
+              echo 'out("Hi")' | java silang.Main --stdin
+              java silang.Main --ast hello.si
               java silang.Main --tokens hello.si
 
             Exit codes:
               0  Success
-              1  Lexer or parse error(s)
+              1  Lexer, parse, or runtime error
               2  File not found or I/O error
               3  Bad command-line arguments
             """);
