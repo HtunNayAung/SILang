@@ -34,3 +34,6 @@ out(msg)
 // ── Unary negation ────────────────────────────────────────────────────────────
 var neg = -42
 out(neg)
+
+var a = neg - name
+out(a)
