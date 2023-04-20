@@ -43,6 +43,7 @@ import java.util.Map;
  *       and token positions are accurate.</li>
  * </ul>
  */
+// v0.2 — LBRACE, RBRACE, IF, ELSE, WHILE, comparison and logical operators active
 public final class Lexer {
 
     // ------------------------------------------------------------------ //
@@ -88,6 +89,8 @@ public final class Lexer {
         kw.put("protected",  TokenType.PROTECTED);
         kw.put("import",     TokenType.IMPORT);
         kw.put("module",     TokenType.MODULE);
+        kw.put("and",        TokenType.AND);   // keyword alias for &&
+        kw.put("or",         TokenType.OR);    // keyword alias for ||
 
         KEYWORDS = Collections.unmodifiableMap(kw);
     }
@@ -222,9 +225,10 @@ public final class Lexer {
             case '(' -> addToken(TokenType.LPAREN);
             case ')' -> addToken(TokenType.RPAREN);
 
+            // Braces — active from v0.2 (control flow blocks)
+            case '{' -> addToken(TokenType.LBRACE);
+            case '}' -> addToken(TokenType.RBRACE);
             // Future punctuation — uncomment when parser is ready
-            // case '{' -> addToken(TokenType.LBRACE);
-            // case '}' -> addToken(TokenType.RBRACE);
             // case '[' -> addToken(TokenType.LBRACKET);
             // case ']' -> addToken(TokenType.RBRACKET);
             // case ';' -> addToken(TokenType.SEMICOLON);

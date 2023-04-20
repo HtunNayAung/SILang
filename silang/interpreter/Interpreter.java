@@ -11,108 +11,110 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Tree-walk interpreter for SIlang Version 0.1.
+ * Tree-walk interpreter for SIlang Version 0.2.
  *
- * <p>Evaluates an AST produced by {@link silang.parser.Parser} by visiting
- * each node, computing values for expressions, and executing side-effects
- * for statements.
+ * <p>
+ * Evaluates the AST produced by the parser by visiting each node,
+ * computing values for expressions, and executing side-effects for statements.
  *
- * <h2>Architecture</h2>
- * <p>All operator type-checking and value-computation logic lives in
- * {@link TypeSystem}, not here.  The interpreter's visitor methods are
- * intentionally thin — they evaluate sub-expressions, then delegate to
- * {@code TypeSystem} for the type decision and to perform the arithmetic.
- * This means:
+ * <h2>New in v0.2</h2>
  * <ul>
- *   <li>Zero scattered {@code instanceof} chains in operator methods.</li>
- *   <li>Adding a new operator (v0.2+) requires one entry in
- *       {@link TypeSystem#BINARY_RULES} and one line in
- *       {@link #visitBinary}; nothing else changes.</li>
- *   <li>Type rules are testable in complete isolation from the AST walker.</li>
+ * <li>{@link Stmt.Block} — nested scope, new child {@link Environment}</li>
+ * <li>{@link Stmt.If} — conditional, condition must be boolean</li>
+ * <li>{@link Stmt.While} — loop, condition must be boolean</li>
+ * <li>{@link Stmt.Assign} — re-assignment to an existing variable</li>
+ * <li>{@link Expr.Comparison} — ==, !=, <, <=, >, >= → boolean result</li>
+ * <li>{@link Expr.Logical} — && / || with short-circuit evaluation</li>
+ * <li>{@link Expr.Unary} — extended with ! (logical NOT)</li>
+ * </ul>
+ *
+ * <h2>Condition type rule</h2>
+ * <p>
+ * Both {@code if} and {@code while} conditions must evaluate to
+ * {@code boolean}. Any other type throws {@link RuntimeError} R008.
+ *
+ * <h2>Block scoping rule</h2>
+ * <p>
+ * Every {@code { }} block creates a new child {@link Environment}.
+ * Variables declared inside a block are not visible outside it.
+ * Re-assignment ({@link Stmt.Assign}) walks the scope chain and updates
+ * the variable wherever it was originally declared.
+ *
+ * <h2>Short-circuit evaluation</h2>
+ * <ul>
+ * <li>{@code &&} — if left is {@code false}, right is not evaluated</li>
+ * <li>{@code ||} — if left is {@code true}, right is not evaluated</li>
  * </ul>
  *
  * <h2>Runtime type mapping</h2>
  * <table border="1">
- *   <tr><th>SIlang type</th><th>Java type</th></tr>
- *   <tr><td>int</td>    <td>{@link Integer}</td></tr>
- *   <tr><td>float</td>  <td>{@link Double}</td></tr>
- *   <tr><td>string</td> <td>{@link String}</td></tr>
- *   <tr><td>boolean</td><td>{@link Boolean}</td></tr>
- *   <tr><td>null (future)</td><td>{@code null}</td></tr>
+ * <tr>
+ * <th>SIlang</th>
+ * <th>Java</th>
+ * </tr>
+ * <tr>
+ * <td>int</td>
+ * <td>{@link Integer}</td>
+ * </tr>
+ * <tr>
+ * <td>float</td>
+ * <td>{@link Double}</td>
+ * </tr>
+ * <tr>
+ * <td>string</td>
+ * <td>{@link String}</td>
+ * </tr>
+ * <tr>
+ * <td>boolean</td>
+ * <td>{@link Boolean}</td>
+ * </tr>
  * </table>
- *
- * <h2>Built-in functions (v0.1)</h2>
- * <ul>
- *   <li>{@code out(value)} — prints {@link Stringify#of(Object)} to stdout + newline</li>
- * </ul>
- *
- * <h2>Usage</h2>
- * <pre>{@code
- * Interpreter interp = new Interpreter(fileName, sourceLines);
- * interp.interpret(statements);
- * }</pre>
  */
 public final class Interpreter
         implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     // ------------------------------------------------------------------ //
-    //  State                                                             //
+    // State //
     // ------------------------------------------------------------------ //
 
-    /** Global scope — the only scope in SIlang v0.1. */
+    /** Global scope — survives for the lifetime of the program. */
     private final Environment globals;
 
     /**
-     * Active scope.  In v0.1 always equal to {@link #globals}.
-     * Will diverge when blocks (v0.2) and functions (v0.3) are added.
+     * The currently active scope. Changes as blocks are entered and exited.
+     * In v0.1-style flat programs this is always equal to {@link #globals}.
      */
     private Environment environment;
 
-    /**
-     * Registered built-in callables, keyed by name.
-     * Extended by adding a single {@code put()} in {@link #registerBuiltins()}.
-     */
+    /** Built-in functions registered by name. */
     private final Map<String, SiCallable> builtins;
 
-    /** Source file name for diagnostic messages. */
+    /** Source file name — for diagnostic messages. */
     private final String fileName;
 
-    /** Raw source lines for diagnostic caret snippets. */
+    /** Raw source lines — for diagnostic caret snippets. */
     private final List<String> sourceLines;
 
     // ------------------------------------------------------------------ //
-    //  Construction                                                      //
+    // Construction //
     // ------------------------------------------------------------------ //
 
-    /**
-     * Creates an interpreter ready to execute a SIlang v0.1 program.
-     *
-     * @param fileName    name of the source file (for error messages)
-     * @param sourceLines raw source split on {@code '\n'} (for error snippets)
-     */
     public Interpreter(String fileName, List<String> sourceLines) {
-        this.fileName    = (fileName    != null) ? fileName    : "<unknown>";
+        this.fileName = (fileName != null) ? fileName : "<unknown>";
         this.sourceLines = (sourceLines != null) ? sourceLines : List.of();
-        this.globals     = new Environment();
+        this.globals = new Environment();
         this.environment = globals;
-        this.builtins    = registerBuiltins();
+        this.builtins = registerBuiltins();
     }
 
     // ------------------------------------------------------------------ //
-    //  Public API                                                        //
+    // Public API //
     // ------------------------------------------------------------------ //
 
-    /**
-     * Runs a complete program.  Throws {@link RuntimeError} on the first
-     * semantic fault — the error is not caught here; callers (Main) format
-     * and display it.
-     *
-     * @param statements the top-level statement list from the parser
-     */
+    /** Runs a complete program. */
     public void interpret(List<Stmt> statements) {
-        for (Stmt statement : statements) {
+        for (Stmt statement : statements)
             execute(statement);
-        }
     }
 
     /** Executes one statement. */
@@ -125,22 +127,16 @@ public final class Interpreter
         return expr.accept(this);
     }
 
-    /** Returns the global environment (for testing / REPL inspection). */
+    /** Returns the global environment (for testing / REPL). */
     public Environment getGlobals() {
         return globals;
     }
 
     // ================================================================== //
-    //  Stmt.Visitor                                                      //
+    // Stmt.Visitor //
     // ================================================================== //
 
-    /**
-     * Declares a variable: evaluates the initializer and stores the result.
-     *
-     * <pre>
-     *   var x = 5 + 3   →  environment.define("x", 8)
-     * </pre>
-     */
+    /** Declares a variable: {@code var x = expr}. */
     @Override
     public Void visitVarStmt(Stmt.Var stmt) {
         Object value = evaluate(stmt.initializer);
@@ -149,65 +145,154 @@ public final class Interpreter
     }
 
     /**
-     * Evaluates an expression for its side-effects; discards the value.
-     * In v0.1 this is almost always an {@code out()} call.
+     * Re-assigns an existing variable: {@code x = expr}.
+     *
+     * <p>
+     * Calls {@link Environment#assign} which walks up the scope chain and
+     * updates the variable wherever it was first declared. Throws R005 if
+     * the variable does not exist in any enclosing scope.
      */
+    @Override
+    public Void visitAssignStmt(Stmt.Assign stmt) {
+        Object value = evaluate(stmt.value);
+        environment.assign(stmt.name, value);
+        return null;
+    }
+
+    /** Expression statement — evaluate for side-effects, discard result. */
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
         evaluate(stmt.expression);
         return null;
     }
 
-    // ================================================================== //
-    //  Expr.Visitor                                                      //
-    // ================================================================== //
+    // ------------------------------------------------------------------ //
+    // Block //
+    // ------------------------------------------------------------------ //
 
     /**
-     * Literal — already a Java value; return as-is.
-     * ({@link Integer}, {@link Double}, {@link String}, {@link Boolean}, or {@code null})
+     * Executes a braced block in a new child scope.
+     *
+     * <p>
+     * The child {@link Environment} is created on entry and the active
+     * environment is restored to the parent on exit — even if an exception
+     * is thrown. This guarantees scope isolation regardless of errors.
      */
+    @Override
+    public Void visitBlockStmt(Stmt.Block stmt) {
+        executeBlock(stmt.statements, new Environment(environment));
+        return null;
+    }
+
+    /**
+     * Executes a list of statements inside a given scope.
+     *
+     * <p>
+     * This is extracted from {@link #visitBlockStmt} so that future
+     * function calls can pass in a pre-built closure environment.
+     *
+     * @param statements the statements to execute
+     * @param scope      the scope in which to execute them
+     */
+    public void executeBlock(List<Stmt> statements, Environment scope) {
+        Environment previous = this.environment;
+        try {
+            this.environment = scope;
+            for (Stmt stmt : statements)
+                execute(stmt);
+        } finally {
+            this.environment = previous; // always restore, even on exception
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // If //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Executes an if statement.
+     *
+     * <p>
+     * The condition is evaluated exactly once. Its result must be
+     * {@code boolean}; any other type throws {@link RuntimeError} R008.
+     * Exactly one branch is executed (or none if the condition is false
+     * and there is no else-branch).
+     */
+    @Override
+    public Void visitIfStmt(Stmt.If stmt) {
+        Object condValue = evaluate(stmt.condition);
+        boolean cond = requireBoolean(stmt.keyword, condValue);
+
+        if (cond) {
+            visitBlockStmt(stmt.thenBranch);
+        } else if (stmt.elseBranch != null) {
+            visitBlockStmt(stmt.elseBranch);
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------ //
+    // While //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Executes a while loop.
+     *
+     * <p>
+     * The condition is re-evaluated before every iteration. It must
+     * be {@code boolean}; any other type throws {@link RuntimeError} R008.
+     * The loop exits when the condition is {@code false}.
+     *
+     * <p>
+     * Future: {@code break} and {@code continue} will be implemented
+     * as control-flow exceptions ({@code BreakSignal}, {@code ContinueSignal})
+     * caught here, matching the standard interpreter pattern.
+     */
+    @Override
+    public Void visitWhileStmt(Stmt.While stmt) {
+        while (true) {
+            Object condValue = evaluate(stmt.condition);
+            boolean cond = requireBoolean(stmt.keyword, condValue);
+            if (!cond)
+                break;
+            visitBlockStmt(stmt.body);
+        }
+        return null;
+    }
+
+    // ================================================================== //
+    // Expr.Visitor //
+    // ================================================================== //
+
+    /** Literal — already a typed Java value; return as-is. */
     @Override
     public Object visitLiteral(Expr.Literal expr) {
         return expr.value;
     }
 
-    /**
-     * Variable — look up in the current scope chain.
-     *
-     * @throws RuntimeError R004 if the name has not been declared
-     */
+    /** Variable — look up in the current scope chain. */
     @Override
     public Object visitVariable(Expr.Variable expr) {
         return environment.get(expr.name);
     }
 
-    /**
-     * Grouping — transparent at runtime; just evaluate the inner expression.
-     */
+    /** Grouping — transparent at runtime. */
     @Override
     public Object visitGrouping(Expr.Grouping expr) {
         return evaluate(expr.expression);
     }
 
     // ------------------------------------------------------------------ //
-    //  Unary                                                             //
+    // Unary //
     // ------------------------------------------------------------------ //
 
     /**
      * Evaluates a unary expression.
      *
-     * <h3>Type rules</h3>
-     * <table border="1">
-     *   <tr><th>Operator</th><th>Operand</th><th>Result</th></tr>
-     *   <tr><td>{@code -}</td><td>int</td>    <td>int</td></tr>
-     *   <tr><td>{@code -}</td><td>float</td>  <td>float</td></tr>
-     *   <tr><td>{@code -}</td><td>string</td> <td>→ R002</td></tr>
-     *   <tr><td>{@code -}</td><td>boolean</td><td>→ R002</td></tr>
-     * </table>
-     *
-     * <p>Future: {@code !boolean} (v0.2) will add a {@code BANG} branch here.
-     *
-     * @throws RuntimeError R002 if unary {@code -} is applied to a non-numeric value
+     * <ul>
+     * <li>{@code -} negation: int/float only → R002 for other types</li>
+     * <li>{@code !} logical NOT: boolean only → R002 for other types</li>
+     * </ul>
      */
     @Override
     public Object visitUnary(Expr.Unary expr) {
@@ -215,74 +300,111 @@ public final class Interpreter
 
         return switch (expr.operator.type) {
             case MINUS -> {
-                // Delegate type check to TypeSystem — throws R002 if invalid
                 TypeSystem.checkUnaryNegate(expr.operator, operand);
                 yield TypeSystem.computeNegate(operand);
             }
-
-            // Future v0.2: BANG (logical NOT)
-            // case BANG -> {
-            //     TypeSystem.checkUnaryNot(expr.operator, operand);
-            //     yield !(Boolean) operand;
-            // }
-
+            case BANG -> {
+                if (!(operand instanceof Boolean)) {
+                    throw RuntimeError.cannotNot(expr.operator, operand);
+                }
+                yield !(Boolean) operand;
+            }
             default -> throw new IllegalStateException(
-                "Unhandled unary operator: " + expr.operator.lexeme);
+                    "Unhandled unary operator: " + expr.operator.lexeme);
         };
     }
 
     // ------------------------------------------------------------------ //
-    //  Binary                                                            //
+    // Binary (arithmetic) //
     // ------------------------------------------------------------------ //
 
     /**
-     * Evaluates a binary expression using the full operator type matrix.
-     *
-     * <h3>Operator rules (v0.1)</h3>
-     * <p>All rules are defined in {@link TypeSystem#BINARY_RULES}.  This
-     * method contains no type logic itself — it:
-     * <ol>
-     *   <li>Evaluates both operands.</li>
-     *   <li>Calls {@link TypeSystem#checkBinary} to validate types and obtain
-     *       the {@link TypeSystem.TypeCheckResult} describing what to compute.</li>
-     *   <li>Calls {@link TypeSystem#compute} to perform the actual arithmetic.</li>
-     * </ol>
-     *
-     * <p>This two-step separation means the type check and the computation
-     * are never accidentally skipped or reordered.
+     * Evaluates an arithmetic binary expression.
+     * All type logic delegated to {@link TypeSystem}.
      *
      * @throws RuntimeError R001 for division by zero
-     * @throws RuntimeError R003 for incompatible operand types
+     * @throws RuntimeError R003 for type mismatches
      */
     @Override
     public Object visitBinary(Expr.Binary expr) {
-        // Evaluate both sides fully before type-checking (left-to-right order)
-        Object left  = evaluate(expr.left);
+        Object left = evaluate(expr.left);
         Object right = evaluate(expr.right);
-
-        // Validate types and obtain computation descriptor — throws R003 on mismatch
-        TypeSystem.TypeCheckResult typeResult = TypeSystem.checkBinary(expr.operator, left, right);
-
-        // Perform the computation (may throw R001 for division by zero)
-        return TypeSystem.compute(expr.operator, left, right, typeResult);
+        TypeSystem.TypeCheckResult result = TypeSystem.checkBinary(expr.operator, left, right);
+        return TypeSystem.compute(expr.operator, left, right, result);
     }
 
     // ------------------------------------------------------------------ //
-    //  Call                                                              //
+    // Comparison //
     // ------------------------------------------------------------------ //
 
     /**
-     * Evaluates a function call expression.
+     * Evaluates a comparison expression.
      *
-     * <h3>Call resolution order (v0.1)</h3>
-     * <ol>
-     *   <li>Resolve the callee to a string name (must be a {@link Expr.Variable}).</li>
-     *   <li>Look up in {@link #builtins} map (handles {@code out}).</li>
-     *   <li>Future v0.3: look up in environment for user-defined functions.</li>
-     * </ol>
+     * <p>
+     * Comparison operators ({@code ==}, {@code !=}, {@code <}, etc.)
+     * always produce a {@code boolean}. The type rules are defined in
+     * {@link TypeSystem#BINARY_RULES}: only numeric × numeric and
+     * same-type comparisons are valid.
      *
-     * @throws RuntimeError R006 if the callee name is not a known function
-     * @throws RuntimeError R007 if the argument count does not match the arity
+     * @throws RuntimeError R003 if the operand types are incompatible
+     */
+    @Override
+    public Object visitComparison(Expr.Comparison expr) {
+        Object left = evaluate(expr.left);
+        Object right = evaluate(expr.right);
+        TypeSystem.TypeCheckResult result = TypeSystem.checkBinary(expr.operator, left, right);
+        return TypeSystem.compute(expr.operator, left, right, result);
+    }
+
+    // ------------------------------------------------------------------ //
+    // Logical (short-circuit) //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Evaluates a short-circuit logical expression ({@code &&} / {@code ||}).
+     *
+     * <p>
+     * Both operands must be {@code boolean}; the left operand is checked
+     * immediately. If short-circuit applies, the right operand is never
+     * evaluated (its side-effects are skipped).
+     *
+     * @throws RuntimeError R002 if either operand is not boolean
+     */
+    @Override
+    public Object visitLogical(Expr.Logical expr) {
+        Object left = evaluate(expr.left);
+
+        // Left must be boolean regardless of short-circuit
+        if (!(left instanceof Boolean)) {
+            throw RuntimeError.cannotNot(expr.operator, left); // reuse R002
+        }
+
+        boolean lv = (Boolean) left;
+
+        // Short-circuit: && → skip right if false; || → skip right if true
+        if (expr.operator.type == TokenType.AND && !lv)
+            return false;
+        if (expr.operator.type == TokenType.OR && lv)
+            return true;
+
+        // Evaluate right and type-check it
+        Object right = evaluate(expr.right);
+        if (!(right instanceof Boolean)) {
+            throw RuntimeError.cannotNot(expr.operator, right);
+        }
+
+        return (Boolean) right;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Call //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Evaluates a function call.
+     *
+     * @throws RuntimeError R006 if the function name is unknown
+     * @throws RuntimeError R007 if the argument count is wrong
      */
     @Override
     public Object visitCall(Expr.Call expr) {
@@ -290,17 +412,13 @@ public final class Interpreter
 
         SiCallable callable = builtins.get(calleeName);
         if (callable == null) {
-            // Future v0.3: check environment for SiCallable values
             throw RuntimeError.unknownFunction(calleeToken(expr.callee, expr.paren));
         }
 
-        // Evaluate all arguments left-to-right before arity check
         List<Object> args = new ArrayList<>(expr.arguments.size());
-        for (Expr arg : expr.arguments) {
+        for (Expr arg : expr.arguments)
             args.add(evaluate(arg));
-        }
 
-        // Arity check (variadic callables have arity() == -1)
         int expected = callable.arity();
         if (expected != -1 && args.size() != expected) {
             throw RuntimeError.wrongArity(expr.paren, calleeName, expected, args.size());
@@ -310,25 +428,23 @@ public final class Interpreter
     }
 
     // ================================================================== //
-    //  Built-in function registry                                        //
+    // Built-in function registry //
     // ================================================================== //
 
-    /**
-     * Registers all Version 0.1 built-ins.
-     *
-     * <p>To add a new built-in in a future version, add one entry here.
-     * The {@link #visitCall} dispatch and arity checking require no changes.
-     */
     private Map<String, SiCallable> registerBuiltins() {
         Map<String, SiCallable> map = new HashMap<>();
 
-        // ── out(value) ────────────────────────────────────────────────────
-        //   Prints the canonical string form of its single argument to stdout,
-        //   followed by a newline.  All type conversions are handled by
-        //   {@link Stringify#of} — no special-casing in the built-in itself.
+        // out(value) — print to stdout with newline
         map.put("out", new SiCallable() {
-            @Override public int    arity()       { return 1; }
-            @Override public String displayName() { return "out"; }
+            @Override
+            public int arity() {
+                return 1;
+            }
+
+            @Override
+            public String displayName() {
+                return "out";
+            }
 
             @Override
             public Object call(Interpreter interpreter, List<Object> args) {
@@ -337,55 +453,54 @@ public final class Interpreter
             }
         });
 
-        // ── Future built-ins ──────────────────────────────────────────────
-        // map.put("outErr",   ...);  // stderr output (v0.2)
-        // map.put("clock",    ...);  // milliseconds since epoch (v0.2)
-        // map.put("parseInt", ...);  // string → int (v0.4)
-        // map.put("str",      ...);  // any → string (v0.4)
-
+        // Future: map.put("outErr", ...); map.put("clock", ...); etc.
         return map;
     }
 
     // ================================================================== //
-    //  Call resolution helpers                                           //
+    // Condition type enforcement //
     // ================================================================== //
 
     /**
-     * Resolves the callee expression to its string name.
+     * Asserts that a condition value is boolean; returns it if so.
      *
-     * <p>In v0.1 the callee must be a {@link Expr.Variable}.  Future v0.3+
-     * will extend this to evaluate arbitrary callee expressions and check
-     * whether the resulting value implements {@link SiCallable}.
-     *
-     * @throws RuntimeError R006 if the callee is not an identifier
+     * @param keyword the {@code if} or {@code while} token (for error location)
+     * @param value   the evaluated condition
+     * @return the boolean value
+     * @throws RuntimeError R008 if {@code value} is not boolean
      */
+    private boolean requireBoolean(Token keyword, Object value) {
+        if (value instanceof Boolean b)
+            return b;
+        throw RuntimeError.nonBooleanCondition(keyword, value);
+    }
+
+    // ================================================================== //
+    // Call resolution helpers //
+    // ================================================================== //
+
     private String resolveCalleeName(Expr callee, Token fallback) {
-        if (callee instanceof Expr.Variable v) return v.name.lexeme;
+        if (callee instanceof Expr.Variable v)
+            return v.name.lexeme;
         throw RuntimeError.unknownFunction(fallback);
     }
 
-    /** Returns the identifier token from a Variable callee, or the fallback. */
     private Token calleeToken(Expr callee, Token fallback) {
-        if (callee instanceof Expr.Variable v) return v.name;
+        if (callee instanceof Expr.Variable v)
+            return v.name;
         return fallback;
     }
 
     // ================================================================== //
-    //  Error formatting (called from Main)                               //
+    // Error formatting //
     // ================================================================== //
 
-    /**
-     * Formats a {@link RuntimeError} diagnostic using this interpreter's
-     * file name and source lines.
-     *
-     * @param error the error to format
-     * @return the complete multi-line diagnostic string
-     */
+    /** Formats a {@link RuntimeError} with source-line context. */
     public String formatError(RuntimeError error) {
-        int    line    = error.getToken().line;
+        int line = error.getToken().line;
         String srcLine = (line >= 1 && line <= sourceLines.size())
-            ? sourceLines.get(line - 1)
-            : "";
+                ? sourceLines.get(line - 1)
+                : "";
         return error.formatDiagnostic(fileName, srcLine);
     }
 }

@@ -3,177 +3,135 @@ package silang.ast;
 import java.util.List;
 
 /**
- * Converts an AST back into a human-readable string for debugging.
+ * Produces a parenthesised S-expression representation of a SIlang AST
+ * for debugging and the {@code --ast} CLI flag.
  *
- * <p>The output format is a Lisp-style S-expression, matching the format
- * described in the SIlang compiler spec:
- *
+ * <h2>Output examples</h2>
  * <pre>
- *   (var x (+ 5 3))
- *   (call out x)
- *   (+ (* 2 3) (/ 4 2))
+ *   var x = 5 + 3          →  (var x (+ 5 3))
+ *   out(x * 10)            →  (call out (* x 10))
+ *   if (x > 0) { out(x) } →  (if (> x 0) (block (call out x)))
+ *   while (n > 0) { ... } →  (while (> n 0) (block ...))
+ *   x = x - 1             →  (assign x (- x 1))
+ *   x > 0 && x < 10       →  (&& (> x 0) (< x 10))
  * </pre>
- *
- * <p>This class implements both {@link Expr.Visitor} and {@link Stmt.Visitor},
- * serving as a reference example of the visitor pattern for future phases
- * (type-checker, interpreter, code-generator) to follow.
- *
- * <h2>Usage</h2>
- * <pre>{@code
- * AstPrinter printer = new AstPrinter();
- *
- * // Print a single expression
- * String exprStr = printer.print(expr);
- *
- * // Print a full program
- * String programStr = printer.print(statements);
- * }</pre>
  */
+// v0.2 — visitComparison, visitLogical, visitAssignStmt, visitBlockStmt, visitIfStmt, visitWhileStmt added
 public final class AstPrinter
         implements Expr.Visitor<String>, Stmt.Visitor<String> {
 
     // ------------------------------------------------------------------ //
-    //  Public entry points                                               //
+    //  Public API                                                        //
     // ------------------------------------------------------------------ //
 
-    /**
-     * Prints a single expression as an S-expression string.
-     *
-     * @param expr the expression to print; must not be {@code null}
-     * @return the S-expression string
-     */
-    public String print(Expr expr) {
-        return expr.accept(this);
-    }
+    /** Formats a statement as an S-expression string. */
+    public String print(Stmt stmt)  { return stmt.accept(this); }
 
-    /**
-     * Prints a single statement as an S-expression string.
-     *
-     * @param stmt the statement to print; must not be {@code null}
-     * @return the S-expression string
-     */
-    public String print(Stmt stmt) {
-        return stmt.accept(this);
-    }
+    /** Formats an expression as an S-expression string. */
+    public String print(Expr expr)  { return expr.accept(this); }
 
-    /**
-     * Prints an entire program (list of statements), one per line.
-     *
-     * @param statements the list of top-level statements
-     * @return a newline-separated S-expression string
-     */
-    public String print(List<Stmt> statements) {
-        if (statements.isEmpty()) return "(program)";
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < statements.size(); i++) {
-            sb.append(statements.get(i).accept(this));
-            if (i < statements.size() - 1) sb.append('\n');
-        }
-        return sb.toString();
-    }
+    // ================================================================== //
+    //  Stmt.Visitor                                                      //
+    // ================================================================== //
 
-    // ------------------------------------------------------------------ //
-    //  Expr.Visitor implementations                                      //
-    // ------------------------------------------------------------------ //
-
-    /**
-     * {@code (op left right)} — e.g. {@code (+ 5 3)}, {@code (* x y)}
-     */
-    @Override
-    public String visitBinary(Expr.Binary expr) {
-        return parenthesize(expr.operator.lexeme, expr.left, expr.right);
-    }
-
-    /**
-     * {@code (op right)} — e.g. {@code (- 5)}, {@code (- x)}
-     */
-    @Override
-    public String visitUnary(Expr.Unary expr) {
-        return parenthesize(expr.operator.lexeme, expr.right);
-    }
-
-    /**
-     * The raw literal value: {@code 42}, {@code 3.14}, {@code "hello"},
-     * {@code true}, {@code false}, {@code null}.
-     */
-    @Override
-    public String visitLiteral(Expr.Literal expr) {
-        if (expr.value == null)             return "null";
-        if (expr.value instanceof String s) return "\"" + s + "\"";
-        return String.valueOf(expr.value);
-    }
-
-    /**
-     * Just the variable name: {@code x}, {@code totalSum}.
-     */
-    @Override
-    public String visitVariable(Expr.Variable expr) {
-        return expr.name.lexeme;
-    }
-
-    /**
-     * {@code (group inner)} — makes grouping visible in the printed tree.
-     */
-    @Override
-    public String visitGrouping(Expr.Grouping expr) {
-        return parenthesize("group", expr.expression);
-    }
-
-    /**
-     * {@code (call callee arg1 arg2 ...)} — e.g. {@code (call out "Hello")}.
-     */
-    @Override
-    public String visitCall(Expr.Call expr) {
-        // Build args array for parenthesize
-        Expr[] parts = new Expr[expr.arguments.size() + 1];
-        parts[0] = expr.callee;
-        for (int i = 0; i < expr.arguments.size(); i++) {
-            parts[i + 1] = expr.arguments.get(i);
-        }
-        return parenthesize("call", parts);
-    }
-
-    // ------------------------------------------------------------------ //
-    //  Stmt.Visitor implementations                                      //
-    // ------------------------------------------------------------------ //
-
-    /**
-     * {@code (var name initializer)} — e.g. {@code (var x (+ 5 3))}.
-     */
     @Override
     public String visitVarStmt(Stmt.Var stmt) {
         return "(var " + stmt.name.lexeme + " " + stmt.initializer.accept(this) + ")";
     }
 
-    /**
-     * Delegates directly to the inner expression's printer.
-     * e.g. {@code (call out x)} rather than wrapping in an extra layer.
-     */
+    @Override
+    public String visitAssignStmt(Stmt.Assign stmt) {
+        return "(assign " + stmt.name.lexeme + " " + stmt.value.accept(this) + ")";
+    }
+
     @Override
     public String visitExpressionStmt(Stmt.Expression stmt) {
         return stmt.expression.accept(this);
     }
 
-    // ------------------------------------------------------------------ //
-    //  Helper                                                            //
-    // ------------------------------------------------------------------ //
-
-    /**
-     * Wraps a name and a sequence of sub-expressions in parentheses.
-     *
-     * <pre>
-     *   parenthesize("+", a, b)   →  "(+ a b)"
-     *   parenthesize("group", e)  →  "(group e)"
-     * </pre>
-     */
-    private String parenthesize(String name, Expr... exprs) {
-        StringBuilder sb = new StringBuilder();
-        sb.append('(').append(name);
-        for (Expr expr : exprs) {
-            sb.append(' ');
-            sb.append(expr.accept(this));
+    @Override
+    public String visitBlockStmt(Stmt.Block stmt) {
+        StringBuilder sb = new StringBuilder("(block");
+        for (Stmt s : stmt.statements) {
+            sb.append(" ").append(s.accept(this));
         }
-        sb.append(')');
+        sb.append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitIfStmt(Stmt.If stmt) {
+        StringBuilder sb = new StringBuilder("(if ");
+        sb.append(stmt.condition.accept(this));
+        sb.append(" ").append(stmt.thenBranch.accept(this));
+        if (stmt.elseBranch != null) {
+            sb.append(" ").append(stmt.elseBranch.accept(this));
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitWhileStmt(Stmt.While stmt) {
+        return "(while " + stmt.condition.accept(this)
+             + " " + stmt.body.accept(this) + ")";
+    }
+
+    // ================================================================== //
+    //  Expr.Visitor                                                      //
+    // ================================================================== //
+
+    @Override
+    public String visitBinary(Expr.Binary expr) {
+        return "(" + expr.operator.lexeme
+             + " " + expr.left.accept(this)
+             + " " + expr.right.accept(this) + ")";
+    }
+
+    @Override
+    public String visitComparison(Expr.Comparison expr) {
+        return "(" + expr.operator.lexeme
+             + " " + expr.left.accept(this)
+             + " " + expr.right.accept(this) + ")";
+    }
+
+    @Override
+    public String visitLogical(Expr.Logical expr) {
+        return "(" + expr.operator.lexeme
+             + " " + expr.left.accept(this)
+             + " " + expr.right.accept(this) + ")";
+    }
+
+    @Override
+    public String visitUnary(Expr.Unary expr) {
+        return "(" + expr.operator.lexeme + " " + expr.right.accept(this) + ")";
+    }
+
+    @Override
+    public String visitLiteral(Expr.Literal expr) {
+        if (expr.value == null)              return "null";
+        if (expr.value instanceof String s)  return "\"" + s + "\"";
+        return expr.value.toString();
+    }
+
+    @Override
+    public String visitVariable(Expr.Variable expr) {
+        return expr.name.lexeme;
+    }
+
+    @Override
+    public String visitGrouping(Expr.Grouping expr) {
+        return "(group " + expr.expression.accept(this) + ")";
+    }
+
+    @Override
+    public String visitCall(Expr.Call expr) {
+        StringBuilder sb = new StringBuilder("(call ");
+        sb.append(expr.callee.accept(this));
+        for (Expr arg : expr.arguments) {
+            sb.append(" ").append(arg.accept(this));
+        }
+        sb.append(")");
         return sb.toString();
     }
 }

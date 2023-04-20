@@ -51,6 +51,7 @@ public final class RuntimeError extends RuntimeException {
     public static final String ERR_UNDEFINED_ASSIGN   = "R005";
     public static final String ERR_UNKNOWN_FUNCTION   = "R006";
     public static final String ERR_WRONG_ARITY        = "R007";
+    public static final String ERR_NON_BOOLEAN_COND   = "R008";
 
     // ------------------------------------------------------------------ //
     //  Fields                                                            //
@@ -172,6 +173,27 @@ public final class RuntimeError extends RuntimeException {
         return new RuntimeError(ERR_WRONG_ARITY,
             String.format("'%s' expects %d %s but received %d",
                 funcName, expected, argWord, got), paren);
+    }
+
+    // ── R008 ─────────────────────────────────────────────────────────────
+
+    /**
+     * Condition of {@code if} or {@code while} is not boolean.
+     * Message: "if condition must be boolean but got int"
+     */
+    public static RuntimeError nonBooleanCondition(Token keyword, Object value) {
+        return new RuntimeError(ERR_NON_BOOLEAN_COND,
+            String.format("'%s' condition must be boolean but got %s",
+                keyword.lexeme, typeName(value)), keyword);
+    }
+
+    /**
+     * Logical NOT ({@code !}) applied to a non-boolean value (R002).
+     * Message: "cannot apply '!' to int — '!' requires boolean"
+     */
+    public static RuntimeError cannotNot(Token op, Object value) {
+        return new RuntimeError(ERR_UNARY_TYPE,
+            String.format("cannot apply '!' to %s — '!' requires boolean", typeName(value)), op);
     }
 
     // ------------------------------------------------------------------ //

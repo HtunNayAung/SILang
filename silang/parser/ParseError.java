@@ -20,6 +20,11 @@ import silang.TokenType;
  *   P004  missing closing paren in function call
  *   P005  too many arguments in function call (> MAX_ARGS)
  *   P006  missing '=' in variable declaration
+ *   P007  missing '(' after 'if' or 'while'
+ *   P008  missing ')' after condition in 'if' or 'while'
+ *   P009  missing '{' to begin block
+ *   P010  missing '}' to close block
+ *   P011  missing '=' in assignment statement
  * </pre>
  *
  * <h2>Sample diagnostics</h2>
@@ -37,6 +42,7 @@ import silang.TokenType;
  *    | ^ unexpected token '@bad'
  * </pre>
  */
+// v0.2 — P007-P011 added for control flow
 public final class ParseError extends RuntimeException {
 
     // ------------------------------------------------------------------ //
@@ -49,6 +55,11 @@ public final class ParseError extends RuntimeException {
     public static final String ERR_MISSING_RPAREN_CALL = "P004";
     public static final String ERR_TOO_MANY_ARGS       = "P005";
     public static final String ERR_MISSING_EQUAL       = "P006";
+    public static final String ERR_MISSING_LPAREN_COND = "P007";
+    public static final String ERR_MISSING_RPAREN_COND = "P008";
+    public static final String ERR_MISSING_LBRACE      = "P009";
+    public static final String ERR_MISSING_RBRACE      = "P010";
+    public static final String ERR_MISSING_EQUAL_ASSIGN= "P011";
 
     /** Maximum number of arguments a call expression may have (spec §Built-in Functions). */
     public static final int MAX_ARGS = 255;
@@ -127,6 +138,46 @@ public final class ParseError extends RuntimeException {
             "expected '=' after variable name in declaration but found '%s'",
             tokenDescription(found));
         return new ParseError(ERR_MISSING_EQUAL, msg, found);
+    }
+
+    /** Creates a {@code P007} error for a missing '(' after 'if' or 'while'. */
+    public static ParseError missingLParenCondition(Token keyword, Token found) {
+        String msg = String.format(
+            "expected '(' after '%s' but found '%s'",
+            keyword.lexeme, tokenDescription(found));
+        return new ParseError(ERR_MISSING_LPAREN_COND, msg, found);
+    }
+
+    /** Creates a {@code P008} error for a missing ')' after the condition. */
+    public static ParseError missingRParenCondition(Token keyword, Token found) {
+        String msg = String.format(
+            "expected ')' after '%s' condition but found '%s'",
+            keyword.lexeme, tokenDescription(found));
+        return new ParseError(ERR_MISSING_RPAREN_COND, msg, found);
+    }
+
+    /** Creates a {@code P009} error for a missing '{' to open a block. */
+    public static ParseError missingLBrace(Token found) {
+        String msg = String.format(
+            "expected '{' to begin block but found '%s'",
+            tokenDescription(found));
+        return new ParseError(ERR_MISSING_LBRACE, msg, found);
+    }
+
+    /** Creates a {@code P010} error for a missing '}' to close a block. */
+    public static ParseError missingRBrace(Token found) {
+        String msg = String.format(
+            "expected '}' to close block but found '%s'",
+            tokenDescription(found));
+        return new ParseError(ERR_MISSING_RBRACE, msg, found);
+    }
+
+    /** Creates a {@code P011} error for a missing '=' in an assignment. */
+    public static ParseError missingEqualAssign(Token name, Token found) {
+        String msg = String.format(
+            "expected '=' after '%s' in assignment but found '%s'",
+            name.lexeme, tokenDescription(found));
+        return new ParseError(ERR_MISSING_EQUAL_ASSIGN, msg, found);
     }
 
     // ------------------------------------------------------------------ //

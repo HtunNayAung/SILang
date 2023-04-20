@@ -159,14 +159,45 @@ public final class TypeSystem {
         new BinaryRule(TokenType.SLASH, SiType.INT,   SiType.FLOAT,  ResultKind.FLOAT_DIVISION,SiType.FLOAT),
         new BinaryRule(TokenType.SLASH, SiType.FLOAT, SiType.INT,    ResultKind.FLOAT_DIVISION,SiType.FLOAT),
 
-        // ── Future: EQUAL_EQUAL (==), BANG_EQUAL (!=) ────────────────────
-        // new BinaryRule(TokenType.EQUAL_EQUAL, null, null, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
-        // new BinaryRule(TokenType.BANG_EQUAL,  null, null, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        // ── EQUAL_EQUAL (==) ─────────────────────────────────────────────
+        //   Any two values of the same type can be equality-compared.
+        //   Cross-type equality is always false (int 1 != float 1.0).
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.INT,     SiType.INT,     ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.FLOAT,   SiType.FLOAT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.INT,     SiType.FLOAT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.FLOAT,   SiType.INT,     ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.STRING,  SiType.STRING,  ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.EQUAL_EQUAL, SiType.BOOLEAN, SiType.BOOLEAN, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
 
-        // ── Future: LESS, GREATER, LESS_EQUAL, GREATER_EQUAL ─────────────
-        // new BinaryRule(TokenType.LESS,         SiType.INT,   SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
-        // new BinaryRule(TokenType.LESS,         SiType.FLOAT, SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
-        // … (numeric combinations) …
+        // ── BANG_EQUAL (!=) ──────────────────────────────────────────────
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.INT,     SiType.INT,     ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.FLOAT,   SiType.FLOAT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.INT,     SiType.FLOAT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.FLOAT,   SiType.INT,     ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.STRING,  SiType.STRING,  ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.BANG_EQUAL, SiType.BOOLEAN, SiType.BOOLEAN, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+
+        // ── LESS (<), LESS_EQUAL (<=), GREATER (>), GREATER_EQUAL (>=) ──
+        //   Only numeric types are ordered (strings are not comparable in v0.2).
+        new BinaryRule(TokenType.LESS,          SiType.INT,   SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS,          SiType.FLOAT, SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS,          SiType.INT,   SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS,          SiType.FLOAT, SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+
+        new BinaryRule(TokenType.LESS_EQUAL,    SiType.INT,   SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS_EQUAL,    SiType.FLOAT, SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS_EQUAL,    SiType.INT,   SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.LESS_EQUAL,    SiType.FLOAT, SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+
+        new BinaryRule(TokenType.GREATER,       SiType.INT,   SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER,       SiType.FLOAT, SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER,       SiType.INT,   SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER,       SiType.FLOAT, SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+
+        new BinaryRule(TokenType.GREATER_EQUAL, SiType.INT,   SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER_EQUAL, SiType.FLOAT, SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER_EQUAL, SiType.INT,   SiType.FLOAT, ResultKind.BOOL_RESULT, SiType.BOOLEAN),
+        new BinaryRule(TokenType.GREATER_EQUAL, SiType.FLOAT, SiType.INT,   ResultKind.BOOL_RESULT, SiType.BOOLEAN),
     };
 
     // ================================================================== //
@@ -292,9 +323,39 @@ public final class TypeSystem {
                 // At least one side is already a string; stringify the other
                 Stringify.of(left) + Stringify.of(right);
 
-            case BOOL_RESULT ->
-                // Future (==, !=, <, >, <=, >=) — not reachable in v0.1
-                throw new IllegalStateException("BOOL_RESULT not yet implemented");
+            case BOOL_RESULT -> {
+                // Comparison operators — both operands already type-checked.
+                // For numeric comparisons, promote int to double if mixed.
+                double l = (left instanceof Double || right instanceof Double)
+                    ? toDouble(left)
+                    : (left instanceof Integer ? (double)(int)(Integer)left : 0);
+                double r = (left instanceof Double || right instanceof Double)
+                    ? toDouble(right)
+                    : (right instanceof Integer ? (double)(int)(Integer)right : 0);
+
+                yield switch (op.type) {
+                    // Numeric ordered comparisons
+                    case LESS          -> {
+                        if (isNumericValue(left)) yield l < r;
+                        yield false; // unreachable after type check
+                    }
+                    case LESS_EQUAL    -> { if (isNumericValue(left)) yield l <= r; yield false; }
+                    case GREATER       -> { if (isNumericValue(left)) yield l >  r; yield false; }
+                    case GREATER_EQUAL -> { if (isNumericValue(left)) yield l >= r; yield false; }
+
+                    // Equality — works for all same-type comparisons
+                    case EQUAL_EQUAL -> {
+                        if (isNumericValue(left) && isNumericValue(right)) yield l == r;
+                        yield left.equals(right);
+                    }
+                    case BANG_EQUAL -> {
+                        if (isNumericValue(left) && isNumericValue(right)) yield l != r;
+                        yield !left.equals(right);
+                    }
+
+                    default -> throw new IllegalStateException("Unexpected comparison op: " + op.lexeme);
+                };
+            }
         };
     }
 
@@ -349,5 +410,10 @@ public final class TypeSystem {
         if (value instanceof Double  d) return d;
         if (value instanceof Integer i) return i.doubleValue();
         throw new IllegalStateException("toDouble called on: " + value);
+    }
+
+    /** Returns true if value is a numeric (non-boolean) Java number. */
+    private static boolean isNumericValue(Object value) {
+        return value instanceof Integer || value instanceof Double;
     }
 }

@@ -1,5 +1,6 @@
-// SIlang Version 0.1 — sample source file
-// This program exercises every feature the v0.1 lexer must handle.
+// SIlang Version 0.2 — sample source file
+// Exercises every feature: variables, arithmetic, strings, booleans,
+// comparison operators, logical operators, if/else, while, blocks, assignment.
 
 // ── Basic output ──────────────────────────────────────────────────────────────
 out("Hello, World!")
@@ -9,7 +10,7 @@ var x = 5
 var y = 10
 out(x + y)
 
-/* Floating-point and boolean values */
+// Floating-point and boolean values
 var price  = 19.99
 var active = true
 var done   = false
@@ -23,17 +24,88 @@ out(complex)
 
 // ── String concatenation ──────────────────────────────────────────────────────
 var name = "Aung"
-out("Hello " + name)
+out("Hello, " + name + "!")
 out("Price: " + price)
 out("Active: " + active)
 
-// ── Escape sequences inside strings ──────────────────────────────────────────
-var msg = "Line one\nLine two\tTabbed"
-out(msg)
-
-// ── Unary negation ────────────────────────────────────────────────────────────
+// ── Unary negation and logical NOT ────────────────────────────────────────────
 var neg = -42
 out(neg)
+out(!done)
 
-var a = neg - name
-out(a)
+// ── Comparison operators ──────────────────────────────────────────────────────
+out(x > 0)
+out(x == 5)
+out(y != x)
+
+// ── If / else ─────────────────────────────────────────────────────────────────
+if (x > 0) {
+    out("x is positive")
+} else {
+    out("x is not positive")
+}
+
+if (price > 100.0) {
+    out("expensive")
+} else {
+    out("affordable")
+}
+
+// ── Logical operators (short-circuit) ────────────────────────────────────────
+if (x > 0 and y > 0) {
+    out("both positive")
+}
+
+if (done or active) {
+    out("done or active")
+}
+
+// ── Assignment ────────────────────────────────────────────────────────────────
+var counter = 3
+out("counting down:")
+while (counter > 0) {
+    out(counter)
+    counter = counter - 1
+}
+out("done")
+
+// ── While loop — accumulator ──────────────────────────────────────────────────
+var sum = 0
+var i = 1
+while (i <= 5) {
+    sum = sum + i
+    i = i + 1
+}
+out("sum 1..5 = " + sum)
+
+// ── Block scoping ─────────────────────────────────────────────────────────────
+var outer = "outer"
+{
+    var inner = "inner"
+    out(outer + " sees " + inner)
+}
+out(outer)
+
+// ── Nested if ─────────────────────────────────────────────────────────────────
+var score = 85
+if (score >= 90) {
+    out("grade: A")
+} else {
+    if (score >= 80) {
+        out("grade: B")
+    } else {
+        out("grade: C")
+    }
+}
+
+// ── Fibonacci via while ───────────────────────────────────────────────────────
+var a = 0
+var b = 1
+var n = 8
+while (n > 0) {
+    var tmp = a + b
+    a = b
+    b = tmp
+    n = n - 1
+}
+out("fib(8) = " + a)

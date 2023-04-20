@@ -2,117 +2,103 @@ package silang.ast;
 
 import silang.Token;
 
+import java.util.List;
+
 /**
  * Base class for every statement node in the SIlang AST.
  *
- * <p>In SIlang v0.1 there are only two kinds of statement:
- * <ol>
- *   <li>{@link Var}        — a variable declaration  ({@code var x = 5})</li>
- *   <li>{@link Expression} — an expression evaluated for side-effects
- *                            ({@code out("hello")})</li>
- * </ol>
+ * <h2>Statement hierarchy (SIlang v0.2)</h2>
+ * <ul>
+ * <li>{@link Var} — {@code var x = expr}</li>
+ * <li>{@link Assign} — {@code x = expr} (re-assignment)</li>
+ * <li>{@link Expression} — {@code expr} (side-effect only)</li>
+ * <li>{@link Block} — {@code { stmt* }}</li>
+ * <li>{@link If} — {@code if (cond) block (else block)?}</li>
+ * <li>{@link While} — {@code while (cond) block}</li>
+ * </ul>
  *
- * <p>The hierarchy is {@code sealed} for the same reasons as {@link Expr}:
- * exhaustive pattern-matching and compile-time safety when new statement
- * types are added in later versions.
- *
- * <h2>Statement grammar (SIlang v0.1)</h2>
+ * <h2>Grammar (SIlang v0.2)</h2>
+ * 
  * <pre>
- *   program     →  statement* EOF
- *   statement   →  variableDecl | exprStatement
- *   variableDecl→  "var" IDENTIFIER "=" expression
+ *   program      →  declaration* EOF
+ *   declaration  →  variableDecl | statement
+ *   variableDecl →  "var" IDENTIFIER "=" expression
+ *   statement    →  assignStmt | exprStatement | ifStmt | whileStmt | block
+ *   assignStmt   →  IDENTIFIER "=" expression
  *   exprStatement→  expression
+ *   ifStmt       →  "if" "(" expression ")" block ( "else" block )?
+ *   whileStmt    →  "while" "(" expression ")" block
+ *   block        →  "{" declaration* "}"
  * </pre>
  *
- * <h2>Visitor pattern</h2>
- * <p>Just like {@link Expr}, statements expose an {@link Visitor} interface
- * so downstream phases can traverse them without touching this file.
- *
  * <h2>Forward-compatibility</h2>
- * <p>Future statement types to be added here:
  * <ul>
- *   <li>{@code If}       — {@code if (cond) { … } else { … }}  (v0.2)</li>
- *   <li>{@code While}    — {@code while (cond) { … }}          (v0.2)</li>
- *   <li>{@code Block}    — {@code { stmt* }}                   (v0.2)</li>
- *   <li>{@code Return}   — {@code return expr}                 (v0.3)</li>
- *   <li>{@code Function} — {@code fun name(params) { … }}      (v0.3)</li>
- *   <li>{@code Class}    — {@code class Name { … }}            (v0.5)</li>
+ * <li>{@code Return} — {@code return expr} (v0.3)</li>
+ * <li>{@code Function} — {@code fun name(p*) block} (v0.3)</li>
+ * <li>{@code For} — {@code for (init;cond;step)} (v0.4)</li>
+ * <li>{@code Class} — {@code class Name { … }} (v0.5)</li>
  * </ul>
  */
 public sealed abstract class Stmt
-    permits Stmt.Var,
-            Stmt.Expression {
+        permits Stmt.Var,
+        Stmt.Assign,
+        Stmt.Expression,
+        Stmt.Block,
+        Stmt.If,
+        Stmt.While {
 
     // ------------------------------------------------------------------ //
-    //  Visitor interface                                                  //
+    // Visitor interface //
     // ------------------------------------------------------------------ //
 
     /**
-     * Visitor over the statement hierarchy.
+     * Visitor over all statement types.
      *
-     * @param <R> the return type of each {@code visit} method
+     * @param <R> return type of each visit method
      */
     public interface Visitor<R> {
         R visitVarStmt(Var stmt);
+
+        R visitAssignStmt(Assign stmt);
+
         R visitExpressionStmt(Expression stmt);
+
+        R visitBlockStmt(Block stmt);
+
+        R visitIfStmt(If stmt);
+
+        R visitWhileStmt(While stmt);
     }
 
-    /**
-     * Accepts a visitor and dispatches to the correct {@code visit} method.
-     *
-     * @param <R>     the visitor's return type
-     * @param visitor the visitor to dispatch to
-     * @return the value returned by the visitor
-     */
+    /** Accepts a visitor and dispatches to the matching visit method. */
     public abstract <R> R accept(Visitor<R> visitor);
 
     // ================================================================== //
-    //  Concrete node types                                                //
+    // Concrete node types //
     // ================================================================== //
 
     // ------------------------------------------------------------------ //
-    //  Var  —  variable declaration                                      //
+    // Var — variable declaration (var x = expr) //
     // ------------------------------------------------------------------ //
 
     /**
-     * A variable declaration statement: {@code var <name> = <initializer>}.
+     * Declares a new variable in the current scope and binds an initial value.
      *
-     * <p>In SIlang v0.1 every variable declaration <em>must</em> include an
-     * initializer.  The {@code initializer} field is therefore never
-     * {@code null} for parsed programs.
-     *
-     * <p>Future versions will add type annotations:
      * <pre>
-     *   int x = 5
-     *   string name = "Alice"
-     * </pre>
-     * When that feature arrives a {@code typeAnnotation} field (nullable,
-     * representing the optional explicit type) can be added here without
-     * breaking the v0.1 constructor.
-     *
-     * <pre>Examples:
-     *   var x = 5
+     *   var x = 5 + 3
      *   var name = "Alice"
-     *   var result = (5 + 3) * 10
      * </pre>
      */
     public static final class Var extends Stmt {
 
-        /**
-         * The identifier token that names this variable.
-         * {@code name.lexeme} is the variable's string name.
-         * {@code name.line} / {@code name.column} locate it in source.
-         */
+        /** The identifier token naming this variable. */
         public final Token name;
 
-        /**
-         * The expression whose value will be bound to {@link #name}.
-         * Never {@code null} in SIlang v0.1.
-         */
+        /** The expression evaluated to produce the initial value. Never null. */
         public final Expr initializer;
 
         public Var(Token name, Expr initializer) {
-            this.name        = name;
+            this.name = name;
             this.initializer = initializer;
         }
 
@@ -128,30 +114,61 @@ public sealed abstract class Stmt
     }
 
     // ------------------------------------------------------------------ //
-    //  Expression  —  expression evaluated for side-effects              //
+    // Assign — re-assignment (x = expr) //
     // ------------------------------------------------------------------ //
 
     /**
-     * An expression used as a statement — evaluated purely for its
-     * side-effects and whose value is discarded.
+     * Re-assigns a value to a previously declared variable.
      *
-     * <p>In SIlang v0.1 the only useful expression-statements are function
-     * calls such as {@code out("Hello")}.  The grammar allows any expression
-     * to be a statement; later versions will add an optional trailing
-     * semicolon without changing this node.
+     * <p>
+     * Distinct from {@link Var}: does not introduce a new binding; the
+     * variable must already exist in the scope chain (throws R005 otherwise).
      *
-     * <pre>Examples:
-     *   out("Hello")
-     *   out(x + y)
-     *   compute(a, b)   — (once user-defined functions exist)
+     * <pre>
+     *   x = x - 1
+     *   total = price * qty
      * </pre>
+     *
+     * <h3>Why a statement, not an expression?</h3>
+     * <p>
+     * SIlang v0.2 makes assignment a <em>statement</em> rather than an
+     * expression to avoid assignment-in-condition bugs like {@code if (x = 0)}.
+     * Future versions may relax this.
+     */
+    public static final class Assign extends Stmt {
+
+        /** The identifier token naming the variable to update. */
+        public final Token name;
+
+        /** The expression evaluated to produce the new value. */
+        public final Expr value;
+
+        public Assign(Token name, Expr value) {
+            this.name = name;
+            this.value = value;
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> visitor) {
+            return visitor.visitAssignStmt(this);
+        }
+
+        @Override
+        public String toString() {
+            return "Assign(" + name.lexeme + " = " + value + ")";
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Expression — expr evaluated for side-effects //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * An expression used as a statement; its value is discarded.
+     * Primarily used for function calls: {@code out("hello")}.
      */
     public static final class Expression extends Stmt {
 
-        /**
-         * The expression to evaluate.
-         * For v0.1 programs this is almost always a {@link Expr.Call}.
-         */
         public final Expr expression;
 
         public Expression(Expr expression) {
@@ -165,7 +182,163 @@ public sealed abstract class Stmt
 
         @Override
         public String toString() {
-            return "ExprStmt(" + expression + ")";
+            return "Expr(" + expression + ")";
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Block — { declaration* } //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * A braced list of declarations forming a new nested scope.
+     *
+     * <p>
+     * Blocks are used as the body of {@code if}, {@code else}, and
+     * {@code while}. Each block creates a child
+     * {@link silang.interpreter.Environment}
+     * so variables declared inside don't leak out:
+     *
+     * <pre>
+     *   {
+     *       var temp = x
+     *       x = y
+     *       y = temp
+     *   }
+     * </pre>
+     *
+     * <p>
+     * Future: standalone blocks will allow scoped temporaries anywhere.
+     */
+    public static final class Block extends Stmt {
+
+        /** The statements inside the braces. May be empty. */
+        public final List<Stmt> statements;
+
+        public Block(List<Stmt> statements) {
+            this.statements = List.copyOf(statements);
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> visitor) {
+            return visitor.visitBlockStmt(this);
+        }
+
+        @Override
+        public String toString() {
+            return "Block(" + statements.size() + " stmts)";
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // If — if (cond) block (else block)? //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * A conditional statement with an optional else branch.
+     *
+     * <p>
+     * The condition must evaluate to a {@code boolean}; any other type
+     * throws {@link silang.interpreter.RuntimeError} R008 at runtime.
+     *
+     * <pre>
+     *   if (x > 0) {
+     *       out("positive")
+     *   } else {
+     *       out("non-positive")
+     *   }
+     * </pre>
+     *
+     * <p>
+     * Dangling-else is resolved by the parser: an {@code else} always
+     * belongs to the nearest enclosing {@code if} (standard rule).
+     */
+    public static final class If extends Stmt {
+
+        /** The {@code if} keyword token — used for error position reporting. */
+        public final Token keyword;
+
+        /** The condition expression. Must evaluate to boolean at runtime. */
+        public final Expr condition;
+
+        /** The then-branch block. Always non-null. */
+        public final Block thenBranch;
+
+        /**
+         * The else-branch block, or {@code null} if there is no {@code else}.
+         */
+        public final Block elseBranch; // nullable
+
+        public If(Token keyword, Expr condition, Block thenBranch, Block elseBranch) {
+            this.keyword = keyword;
+            this.condition = condition;
+            this.thenBranch = thenBranch;
+            this.elseBranch = elseBranch;
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> visitor) {
+            return visitor.visitIfStmt(this);
+        }
+
+        @Override
+        public String toString() {
+            return "If(" + condition + ", then=" + thenBranch
+                    + (elseBranch != null ? ", else=" + elseBranch : "") + ")";
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // While — while (cond) block //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * A while loop: repeatedly executes {@link #body} as long as
+     * {@link #condition} evaluates to {@code true}.
+     *
+     * <p>
+     * The condition must evaluate to a {@code boolean}; any other type
+     * throws {@link silang.interpreter.RuntimeError} R008 at runtime.
+     *
+     * <pre>
+     *   var n = 5
+     *   while (n > 0) {
+     *       out(n)
+     *       n = n - 1
+     *   }
+     * </pre>
+     *
+     * <p>
+     * Future: {@code break} and {@code continue} will be added as
+     * {@link silang.interpreter.BreakSignal} /
+     * {@link silang.interpreter.ContinueSignal}
+     * exceptions that unwind the call stack to the nearest enclosing loop.
+     */
+    public static final class While extends Stmt {
+
+        /** The {@code while} keyword token — used for error position reporting. */
+        public final Token keyword;
+
+        /** The loop condition. Must evaluate to boolean at runtime. */
+        public final Expr condition;
+
+        /** The loop body block. Executed once per iteration. */
+        public final Block body;
+
+        public While(Token keyword, Expr condition, Block body) {
+            this.keyword = keyword;
+            this.condition = condition;
+            this.body = body;
+        }
+
+        @Override
+        public <R> R accept(Visitor<R> visitor) {
+            return visitor.visitWhileStmt(this);
+        }
+
+        @Override
+        public String toString() {
+            return "While(" + condition + ", " + body + ")";
         }
     }
 }

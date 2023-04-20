@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Compile and run the SIlang v0.1 interpreter
+# build.sh — Compile and run the SIlang v0.2 interpreter
 set -euo pipefail
 
 SRC_DIR="silang"
@@ -18,6 +18,8 @@ fi
 [[ -z "${JAVAC:-}" ]] && { echo "ERROR: javac not found. Install JDK >= 17."; exit 1; }
 
 compile() {
+    # Always clean first — prevents stale .class files causing phantom errors
+    rm -rf "$OUT_DIR"
     mkdir -p "$OUT_DIR"
     "$JAVAC" --release 21 -d "$OUT_DIR" \
         "$SRC_DIR"/*.java \
