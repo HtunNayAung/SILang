@@ -38,6 +38,7 @@ import silang.Token;
  *   --> hello.si:5:9
  * </pre>
  */
+// v0.3 — R009 returnOutsideFunction added
 public final class RuntimeError extends RuntimeException {
 
     // ------------------------------------------------------------------ //
@@ -52,6 +53,7 @@ public final class RuntimeError extends RuntimeException {
     public static final String ERR_UNKNOWN_FUNCTION   = "R006";
     public static final String ERR_WRONG_ARITY        = "R007";
     public static final String ERR_NON_BOOLEAN_COND   = "R008";
+    public static final String ERR_RETURN_OUTSIDE_FN  = "R009";
 
     // ------------------------------------------------------------------ //
     //  Fields                                                            //
@@ -194,6 +196,17 @@ public final class RuntimeError extends RuntimeException {
     public static RuntimeError cannotNot(Token op, Object value) {
         return new RuntimeError(ERR_UNARY_TYPE,
             String.format("cannot apply '!' to %s — '!' requires boolean", typeName(value)), op);
+    }
+
+    // ── R009 ─────────────────────────────────────────────────────────────
+
+    /**
+     * {@code return} used outside any function body.
+     * Message: "cannot use 'return' outside a function"
+     */
+    public static RuntimeError returnOutsideFunction(Token keyword) {
+        return new RuntimeError(ERR_RETURN_OUTSIDE_FN,
+            "cannot use 'return' outside a function", keyword);
     }
 
     // ------------------------------------------------------------------ //

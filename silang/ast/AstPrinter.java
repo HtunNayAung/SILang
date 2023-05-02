@@ -16,7 +16,7 @@ import java.util.List;
  *   x > 0 && x < 10       →  (&& (> x 0) (< x 10))
  * </pre>
  */
-// v0.2 — visitComparison, visitLogical, visitAssignStmt, visitBlockStmt, visitIfStmt, visitWhileStmt added
+// v0.3 — visitFunctionStmt, visitReturnStmt added
 public final class AstPrinter
         implements Expr.Visitor<String>, Stmt.Visitor<String> {
 
@@ -75,6 +75,24 @@ public final class AstPrinter
     public String visitWhileStmt(Stmt.While stmt) {
         return "(while " + stmt.condition.accept(this)
              + " " + stmt.body.accept(this) + ")";
+    }
+
+    @Override
+    public String visitFunctionStmt(Stmt.Function stmt) {
+        StringBuilder sb = new StringBuilder("(fn " + stmt.name.lexeme + "(");
+        for (int i = 0; i < stmt.params.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(stmt.params.get(i).lexeme);
+        }
+        sb.append(") ").append(stmt.body.accept(this)).append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitReturnStmt(Stmt.Return stmt) {
+        return stmt.value != null
+            ? "(return " + stmt.value.accept(this) + ")"
+            : "(return null)";
     }
 
     // ================================================================== //

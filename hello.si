@@ -109,3 +109,31 @@ while (n > 0) {
     n = n - 1
 }
 out("fib(8) = " + a)
+
+// ── User-defined functions ────────────────────────────────────────────────────
+fn add(a, b) {
+    return a + b
+}
+out(add(3, 4))
+
+fn max(a, b) {
+    if (a > b) {
+        return a
+    } else {
+        return b
+    }
+}
+out(max(10, 7))
+
+fn factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+out(factorial(6))
+
+fn greet(name) {
+    out("Hello, " + name + "!")
+}
+greet("Aung")

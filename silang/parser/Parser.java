@@ -139,13 +139,70 @@ public final class Parser {
      */
     private Stmt declaration() {
         try {
-            if (check(TokenType.VAR)) return varDeclaration();
+            if (check(TokenType.FUN))    return functionDeclaration();
+            if (check(TokenType.VAR))    return varDeclaration();
             return statement();
         } catch (ParseError error) {
             errors.add(error);
             synchronize();
             return null;
         }
+    }
+
+    /**
+     * Parses a function declaration.
+     *
+     * <pre>
+     *   functionDecl → "fn" IDENTIFIER "(" paramList ")" block
+     *   paramList    → ( IDENTIFIER ( "," IDENTIFIER )* )?
+     * </pre>
+     */
+    private Stmt.Function functionDeclaration() {
+        Token keyword = consume(TokenType.FUN, "expected 'fn'");
+        Token name    = consume(TokenType.IDENTIFIER, "expected function name after 'fn'");
+
+        consume(TokenType.LPAREN, "expected '(' after function name");
+
+        List<Token> params = new ArrayList<>();
+        if (!check(TokenType.RPAREN)) {
+            params.add(consume(TokenType.IDENTIFIER, "expected parameter name"));
+            while (match(TokenType.COMMA)) {
+                if (params.size() >= ParseError.MAX_ARGS) {
+                    errors.add(ParseError.tooManyArguments(peek()));
+                }
+                params.add(consume(TokenType.IDENTIFIER, "expected parameter name"));
+            }
+        }
+        consume(TokenType.RPAREN, "expected ')' after parameters");
+
+        Stmt.Block body = block();
+        return new Stmt.Function(keyword, name, params, body);
+    }
+
+    /**
+     * Parses a return statement.
+     *
+     * <pre>
+     *   returnStmt → "return" expression?
+     * </pre>
+     *
+     * <p>A bare {@code return} (no expression) returns {@code null}.
+     * The expression is absent when the next token starts a new statement
+     * or is a closing brace.
+     */
+    private Stmt.Return returnStatement() {
+        Token keyword = consume(TokenType.RETURN, "expected 'return'");
+
+        // Expression is optional — absent if next token closes the block
+        // or is a keyword that starts a new statement
+        Expr value = null;
+        if (!check(TokenType.RBRACE) && !isAtEnd()
+                && !check(TokenType.IF) && !check(TokenType.WHILE)
+                && !check(TokenType.FUN) && !check(TokenType.VAR)) {
+            value = expression();
+        }
+
+        return new Stmt.Return(keyword, value);
     }
 
     /**
@@ -182,6 +239,7 @@ public final class Parser {
      * two-token lookahead ({@link #checkAssign()}).
      */
     private Stmt statement() {
+        if (check(TokenType.RETURN)) return returnStatement();
         if (check(TokenType.IF))    return ifStatement();
         if (check(TokenType.WHILE)) return whileStatement();
         if (check(TokenType.LBRACE)) return blockStatement();

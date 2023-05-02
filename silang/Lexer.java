@@ -43,7 +43,7 @@ import java.util.Map;
  *       and token positions are accurate.</li>
  * </ul>
  */
-// v0.2 — LBRACE, RBRACE, IF, ELSE, WHILE, comparison and logical operators active
+// v0.3 — fn keyword active, and/or keyword aliases added
 public final class Lexer {
 
     // ------------------------------------------------------------------ //
@@ -81,7 +81,8 @@ public final class Lexer {
         kw.put("else",       TokenType.ELSE);
         kw.put("while",      TokenType.WHILE);
         kw.put("for",        TokenType.FOR);
-        kw.put("fun",        TokenType.FUN);
+        kw.put("fun",        TokenType.FUN);   // reserved alias
+        kw.put("fn",         TokenType.FUN);   // SILang active function keyword
         kw.put("null",       TokenType.NULL);
         kw.put("static",     TokenType.STATIC);
         kw.put("public",     TokenType.PUBLIC);
