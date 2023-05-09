@@ -15,29 +15,28 @@ import java.util.List;
  * <p>Consumes the flat token stream produced by {@link silang.Lexer} and
  * builds a typed AST ({@link Stmt} / {@link Expr} tree).
  *
- * <h2>Grammar (SIlang v0.2)</h2>
+ * <h2>Grammar (SIlang v0.3)</h2>
  * <pre>
  *   program      →  declaration* EOF
  *
- *   declaration  →  variableDecl
- *                |  statement
+ *   declaration  →  functionDecl | variableDecl | statement
  *
+ *   functionDecl →  "fn" IDENTIFIER "(" paramList ")" block
  *   variableDecl →  "var" IDENTIFIER "=" expression
  *
- *   statement    →  assignStmt
- *                |  ifStmt
- *                |  whileStmt
- *                |  block
- *                |  exprStatement
+ *   statement    →  returnStmt | forStmt | ifStmt | whileStmt
+ *                |  assignStmt | block | exprStatement
  *
- *   assignStmt   →  IDENTIFIER "=" expression
+ *   returnStmt   →  "return" expression?
+ *   forStmt      →  "for" "(" (varDecl | assignStmt | ";") expression? ";" expression? ")" block
  *   ifStmt       →  "if" "(" expression ")" block ( "else" block )?
  *   whileStmt    →  "while" "(" expression ")" block
+ *   assignStmt   →  IDENTIFIER "=" expression
  *   block        →  "{" declaration* "}"
  *   exprStatement→  expression
  *
  *   expression   →  logical
- *   logical      →  comparison ( ( "&&" | "||" ) comparison )*
+ *   logical      →  comparison ( ( "&&" | "||" | "and" | "or" ) comparison )*
  *   comparison   →  additive ( ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) additive )*
  *   additive     →  term ( ( "+" | "-" ) term )*
  *   term         →  unary ( ( "*" | "/" ) unary )*
@@ -240,6 +239,7 @@ public final class Parser {
      */
     private Stmt statement() {
         if (check(TokenType.RETURN)) return returnStatement();
+        if (check(TokenType.FOR))   return forStatement();
         if (check(TokenType.IF))    return ifStatement();
         if (check(TokenType.WHILE)) return whileStatement();
         if (check(TokenType.LBRACE)) return blockStatement();
@@ -305,6 +305,118 @@ public final class Parser {
 
         Stmt.Block body = block();
         return new Stmt.While(keyword, condition, body);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  for statement — desugared into while + block                      //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Parses a for loop and desugars it into an equivalent while loop.
+     *
+     * <pre>
+     *   forStmt → "for" "(" (varDecl | assignStmt | ";") expression? ";" expression? ")" block
+     * </pre>
+     *
+     * <p>Desugaring: the parser never produces a {@code ForStmt} AST node.
+     * Instead it builds the equivalent {@link Stmt.Block} + {@link Stmt.While}
+     * directly, so the interpreter needs no changes at all.
+     *
+     * <h3>Desugaring rules</h3>
+     * <pre>
+     *   for (init; cond; incr) { body }
+     *
+     *   →  {           ← outer block scopes the initializer
+     *        init
+     *        while (cond) {
+     *            body
+     *            incr   ← appended inside the loop body
+     *        }
+     *      }
+     * </pre>
+     *
+     * <h3>Optional clauses</h3>
+     * <ul>
+     *   <li>Initializer — omitted with a bare {@code ;}: {@code for (;cond;incr)}</li>
+     *   <li>Condition   — omitted produces {@code while (true)}: {@code for (init;;incr)}</li>
+     *   <li>Increment   — omitted with a bare {@code )}: {@code for (init;cond;)}</li>
+     * </ul>
+     *
+     * <h3>Examples</h3>
+     * <pre>
+     *   for (var i = 0; i < 5; i = i + 1) { out(i) }
+     *   for (var i = 10; i > 0; i = i - 1) { out(i) }
+     *   for (;true;) { out("forever") }   // infinite loop
+     * </pre>
+     */
+    private Stmt forStatement() {
+        Token keyword = consume(TokenType.FOR, "expected 'for'");
+
+        if (!check(TokenType.LPAREN)) throw ParseError.missingLParenCondition(keyword, peek());
+        consume(TokenType.LPAREN, "expected '(' after 'for'");
+
+        // ── Initializer clause ────────────────────────────────────────────
+        // var i = 0  |  i = 0  |  (empty — just a semicolon)
+        Stmt initializer = null;
+        if (match(TokenType.SEMICOLON)) {
+            // empty initializer — already consumed the ';'
+        } else if (check(TokenType.VAR)) {
+            initializer = varDeclaration();
+            consume(TokenType.SEMICOLON, "expected ';' after for-loop initializer");
+        } else if (checkAssign()) {
+            initializer = assignStatement();
+            consume(TokenType.SEMICOLON, "expected ';' after for-loop initializer");
+        } else {
+            throw ParseError.unexpectedToken(peek(), "variable declaration or assignment in for initializer");
+        }
+
+        // ── Condition clause ──────────────────────────────────────────────
+        // i < 5  |  (empty — becomes 'true')
+        Expr condition = null;
+        if (!check(TokenType.SEMICOLON)) {
+            condition = expression();
+        }
+        consume(TokenType.SEMICOLON, "expected ';' after for-loop condition");
+
+        // ── Increment clause ──────────────────────────────────────────────
+        // i = i + 1  |  (empty)
+        Stmt increment = null;
+        if (!check(TokenType.RPAREN)) {
+            if (checkAssign()) {
+                increment = assignStatement();
+            } else {
+                increment = new Stmt.Expression(expression());
+            }
+        }
+
+        if (!check(TokenType.RPAREN)) throw ParseError.missingRParenCondition(keyword, peek());
+        consume(TokenType.RPAREN, "expected ')' after for-loop clauses");
+
+        // ── Body ──────────────────────────────────────────────────────────
+        Stmt.Block userBody = block();
+
+        // ── Desugar ───────────────────────────────────────────────────────
+        // 1. If there's an increment, append it at the end of the loop body.
+        Stmt.Block loopBody;
+        if (increment != null) {
+            List<Stmt> bodyWithIncr = new ArrayList<>(userBody.statements);
+            bodyWithIncr.add(increment);
+            loopBody = new Stmt.Block(bodyWithIncr);
+        } else {
+            loopBody = userBody;
+        }
+
+        // 2. Build the while node. A missing condition desugars to 'true'.
+        if (condition == null) {
+            condition = new Expr.Literal(true);   // for (;;) → while (true)
+        }
+        Stmt.While whileStmt = new Stmt.While(keyword, condition, loopBody);
+
+        // 3. If there's an initializer, wrap in an outer block to scope it.
+        if (initializer != null) {
+            return new Stmt.Block(List.of(initializer, whileStmt));
+        }
+        return whileStmt;
     }
 
     // ------------------------------------------------------------------ //

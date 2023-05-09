@@ -454,10 +454,22 @@ public final class Interpreter
     private Map<String, SiCallable> registerBuiltins() {
         Map<String, SiCallable> map = new HashMap<>();
 
-        // out(value) — print to stdout with newline
+        // out(value) — print to stdout WITHOUT a trailing newline
         map.put("out", new SiCallable() {
             @Override public int    arity()       { return 1; }
             @Override public String displayName() { return "out"; }
+
+            @Override
+            public Object call(Interpreter interpreter, List<Object> args) {
+                System.out.print(Stringify.of(args.get(0)));
+                return null;
+            }
+        });
+
+        // outn(value) — print to stdout WITH a trailing newline
+        map.put("outn", new SiCallable() {
+            @Override public int    arity()       { return 1; }
+            @Override public String displayName() { return "outn"; }
 
             @Override
             public Object call(Interpreter interpreter, List<Object> args) {
@@ -466,7 +478,6 @@ public final class Interpreter
             }
         });
 
-        // Future: map.put("outErr", ...); map.put("clock", ...); etc.
         return map;
     }
 

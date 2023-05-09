@@ -3,12 +3,12 @@
 // comparison operators, logical operators, if/else, while, blocks, assignment.
 
 // ── Basic output ──────────────────────────────────────────────────────────────
-out("Hello, World!")
+outn("Hello, World!")
 
 // ── Variable declarations ─────────────────────────────────────────────────────
 var x = 5
 var y = 10
-out(x + y)
+outn(x + y)
 
 // Floating-point and boolean values
 var price  = 19.99
@@ -17,57 +17,57 @@ var done   = false
 
 // ── Arithmetic with precedence ────────────────────────────────────────────────
 var result = (5 + 3) * 10
-out(result)
+outn(result)
 
 var complex = 2 * 3 + 4 / 2 - 1
-out(complex)
+outn(complex)
 
 // ── String concatenation ──────────────────────────────────────────────────────
 var name = "Aung"
-out("Hello, " + name + "!")
-out("Price: " + price)
-out("Active: " + active)
+outn("Hello, " + name + "!")
+outn("Price: " + price)
+outn("Active: " + active)
 
 // ── Unary negation and logical NOT ────────────────────────────────────────────
 var neg = -42
-out(neg)
-out(!done)
+outn(neg)
+outn(!done)
 
 // ── Comparison operators ──────────────────────────────────────────────────────
-out(x > 0)
-out(x == 5)
-out(y != x)
+outn(x > 0)
+outn(x == 5)
+outn(y != x)
 
 // ── If / else ─────────────────────────────────────────────────────────────────
 if (x > 0) {
-    out("x is positive")
+    outn("x is positive")
 } else {
-    out("x is not positive")
+    outn("x is not positive")
 }
 
 if (price > 100.0) {
-    out("expensive")
+    outn("expensive")
 } else {
-    out("affordable")
+    outn("affordable")
 }
 
 // ── Logical operators (short-circuit) ────────────────────────────────────────
 if (x > 0 and y > 0) {
-    out("both positive")
+    outn("both positive")
 }
 
 if (done or active) {
-    out("done or active")
+    outn("done or active")
 }
 
 // ── Assignment ────────────────────────────────────────────────────────────────
 var counter = 3
-out("counting down:")
+outn("counting down:")
 while (counter > 0) {
-    out(counter)
+    outn(counter)
     counter = counter - 1
 }
-out("done")
+outn("done")
 
 // ── While loop — accumulator ──────────────────────────────────────────────────
 var sum = 0
@@ -76,25 +76,25 @@ while (i <= 5) {
     sum = sum + i
     i = i + 1
 }
-out("sum 1..5 = " + sum)
+outn("sum 1..5 = " + sum)
 
 // ── Block scoping ─────────────────────────────────────────────────────────────
 var outer = "outer"
 {
     var inner = "inner"
-    out(outer + " sees " + inner)
+    outn(outer + " sees " + inner)
 }
-out(outer)
+outn(outer)
 
 // ── Nested if ─────────────────────────────────────────────────────────────────
 var score = 85
 if (score >= 90) {
-    out("grade: A")
+    outn("grade: A")
 } else {
     if (score >= 80) {
-        out("grade: B")
+        outn("grade: B")
     } else {
-        out("grade: C")
+        outn("grade: C")
     }
 }
 
@@ -108,13 +108,13 @@ while (n > 0) {
     b = tmp
     n = n - 1
 }
-out("fib(8) = " + a)
+outn("fib(8) = " + a)
 
 // ── User-defined functions ────────────────────────────────────────────────────
 fn add(a, b) {
     return a + b
 }
-out(add(3, 4))
+outn(add(3, 4))
 
 fn max(a, b) {
     if (a > b) {
@@ -123,7 +123,7 @@ fn max(a, b) {
         return b
     }
 }
-out(max(10, 7))
+outn(max(10, 7))
 
 fn factorial(n) {
     if (n <= 1) {
@@ -131,9 +131,25 @@ fn factorial(n) {
     }
     return n * factorial(n - 1)
 }
-out(factorial(6))
+outn(factorial(6))
 
 fn greet(name) {
-    out("Hello, " + name + "!")
+    outn("Hello, " + name + "!")
 }
 greet("Aung")
+
+// ── For loops ─────────────────────────────────────────────────────────────────
+for (var i = 0; i < 5; i = i + 1) {
+    outn(i)
+}
+
+var total = 0
+for (var j = 1; j <= 10; j = j + 1) {
+    total = total + j
+}
+outn("sum 1..10 = " + total)
+
+// ── out vs outn ───────────────────────────────────────────────────────────────
+out("one ")
+out("two ")
+outn("three")

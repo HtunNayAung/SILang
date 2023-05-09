@@ -232,7 +232,7 @@ public final class Lexer {
             // Future punctuation — uncomment when parser is ready
             // case '[' -> addToken(TokenType.LBRACKET);
             // case ']' -> addToken(TokenType.RBRACKET);
-            // case ';' -> addToken(TokenType.SEMICOLON);
+            case ';' -> addToken(TokenType.SEMICOLON);  // active from v0.3 (for loops)
             // case ':' -> addToken(TokenType.COLON);
 
             // ----------------------------------------------------------
