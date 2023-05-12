@@ -82,6 +82,10 @@ public final class TypeSystem {
         INT_DIVISION,
         /** Division — same as FLOAT_ARITH but with zero-divisor guard. */
         FLOAT_DIVISION,
+        /** Modulo — integer remainder, with zero-divisor guard. */
+        INT_MODULO,
+        /** Modulo — float remainder, with zero-divisor guard. */
+        FLOAT_MODULO,
         /** Future: boolean result (comparison, logical). */
         BOOL_RESULT
     }
@@ -158,6 +162,12 @@ public final class TypeSystem {
         new BinaryRule(TokenType.SLASH, SiType.FLOAT, SiType.FLOAT,  ResultKind.FLOAT_DIVISION,SiType.FLOAT),
         new BinaryRule(TokenType.SLASH, SiType.INT,   SiType.FLOAT,  ResultKind.FLOAT_DIVISION,SiType.FLOAT),
         new BinaryRule(TokenType.SLASH, SiType.FLOAT, SiType.INT,    ResultKind.FLOAT_DIVISION,SiType.FLOAT),
+
+        // ── PERCENT (%) ───────────────────────────────────────────────────
+        new BinaryRule(TokenType.PERCENT, SiType.INT,   SiType.INT,   ResultKind.INT_MODULO,   SiType.INT),
+        new BinaryRule(TokenType.PERCENT, SiType.FLOAT, SiType.FLOAT, ResultKind.FLOAT_MODULO, SiType.FLOAT),
+        new BinaryRule(TokenType.PERCENT, SiType.INT,   SiType.FLOAT, ResultKind.FLOAT_MODULO, SiType.FLOAT),
+        new BinaryRule(TokenType.PERCENT, SiType.FLOAT, SiType.INT,   ResultKind.FLOAT_MODULO, SiType.FLOAT),
 
         // ── EQUAL_EQUAL (==) ─────────────────────────────────────────────
         //   Any two values of the same type can be equality-compared.
@@ -317,6 +327,18 @@ public final class TypeSystem {
                 double divisor = toDouble(right);
                 if (divisor == 0.0) throw RuntimeError.divisionByZero(op);
                 yield toDouble(left) / divisor;
+            }
+
+            case INT_MODULO -> {
+                int divisor = (Integer) right;
+                if (divisor == 0) throw RuntimeError.divisionByZero(op);
+                yield (Integer) left % divisor;
+            }
+
+            case FLOAT_MODULO -> {
+                double divisor = toDouble(right);
+                if (divisor == 0.0) throw RuntimeError.divisionByZero(op);
+                yield toDouble(left) % divisor;
             }
 
             case STRING_CONCAT ->

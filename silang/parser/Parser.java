@@ -572,7 +572,7 @@ public final class Parser {
     private Expr term() {
         Expr expr = unary();
 
-        while (match(TokenType.STAR, TokenType.SLASH)) {
+        while (match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT)) {
             Token operator = previous();
             Expr  right    = unary();
             expr = new Expr.Binary(expr, operator, right);

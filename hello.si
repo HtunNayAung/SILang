@@ -153,3 +153,15 @@ outn("sum 1..10 = " + total)
 out("one ")
 out("two ")
 outn("three")
+
+
+for (var i = 1; i <= 20; i = i + 1) {
+    if (i % 3 == 0 and i % 5 == 0) { outn("FizzBuzz") }
+    else {
+        if (i % 3 == 0) { outn("Fizz") }
+        else {
+            if (i % 5 == 0) { outn("Buzz") }
+            else { outn(i) }
+        }
+    }
+}

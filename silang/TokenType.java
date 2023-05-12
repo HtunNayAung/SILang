@@ -124,6 +124,9 @@ public enum TokenType {
     /** {@code /}  Division.                                              */
     SLASH,
 
+    /** {@code %}  Modulo (remainder).                                    */
+    PERCENT,
+
     /** {@code =}  Assignment.                                            */
     EQUAL,
 

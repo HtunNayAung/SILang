@@ -222,6 +222,7 @@ public final class Lexer {
             case '+' -> addToken(TokenType.PLUS);
             case '-' -> addToken(TokenType.MINUS);
             case '*' -> addToken(TokenType.STAR);
+            case '%' -> addToken(TokenType.PERCENT);
             case ',' -> addToken(TokenType.COMMA);
             case '(' -> addToken(TokenType.LPAREN);
             case ')' -> addToken(TokenType.RPAREN);
